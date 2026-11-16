@@ -2196,6 +2196,34 @@ impl AccountSetup {
                     note(ui, tl!("This build can't connect to mail servers. The account can still be added."), t.text_dim);
                 }
             }
+            // Keep the certificate override visible on the sign-in page. Server details
+            // are normally collapsed for known providers, but a certificate error must not
+            // leave the owner hunting through a hidden disclosure to retry securely.
+            if !self.settings_open {
+                let mut insecure = self.incoming.security.insecure();
+                if self.incoming.security != Security::None && !self.incoming.host.trim().is_empty() {
+                    let response = ui.checkbox(&mut insecure, tl!("Allow insecure TLS certificates for incoming mail (IMAP)"));
+                    let changed = response.changed();
+                    response.on_hover_text(tl!("Disables certificate validation for incoming mail only. The connection remains encrypted."));
+                    if changed {
+                        self.incoming.security = self.incoming.security.with_insecure(insecure);
+                    }
+                }
+
+                let mut insecure = self.outgoing.security.insecure();
+                if self.outgoing.security != Security::None && !self.outgoing.host.trim().is_empty() {
+                    let response = ui.checkbox(&mut insecure, tl!("Allow insecure TLS certificates for outgoing mail (SMTP)"));
+                    let changed = response.changed();
+                    response.on_hover_text(tl!("Disables certificate validation for outgoing mail only. The connection remains encrypted."));
+                    if changed {
+                        self.outgoing.security = self.outgoing.security.with_insecure(insecure);
+                    }
+                }
+
+                if self.incoming.security.insecure() || self.outgoing.security.insecure() {
+                    note(ui, tl!("Warning: the selected server's certificate and identity will not be verified."), t.orange);
+                }
+            }
             ui.add_space(2.0);
             disclosure(ui, tl!("Change account settings"), &mut self.settings_open, &t);
             if self.settings_open {
