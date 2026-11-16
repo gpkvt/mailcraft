@@ -2682,12 +2682,13 @@ fn server_row(ui: &mut Ui, pass: &mut Pass, label: &str, key: &'static str, serv
     if server.security != Security::None {
         let mut insecure = server.security.insecure();
         let response = ui.checkbox(&mut insecure, tl!("Allow insecure TLS certificates"));
+        let changed = response.changed();
         response.on_hover_text(tl!("Disables certificate validation for this server. Traffic remains encrypted, but the server's identity is not verified."));
-        if response.changed() {
+        if changed {
             server.security = server.security.with_insecure(insecure);
         }
         if insecure {
-            ui.colored_label(pass.t.warning, tl!("Warning: any certificate will be accepted for this server."));
+            ui.colored_label(pass.t.text_dim, tl!("Warning: any certificate will be accepted for this server."));
         }
     }
 }
