@@ -505,13 +505,13 @@ pub(crate) fn open_imap_with<'a>(
     let (mut stream, host) = transport::open(server, Service::Imap, patience)?;
     stream.watch(cancel);
     let mut imap = Imap::connect(stream)?;
-    if server.security == Security::StartTls {
+    if server.security.is_starttls() {
         // Never carry on in the clear when encryption was asked for.
         if !imap.capabilities()?.iter().any(|c| c == "STARTTLS") {
             return Err(NetError::Tls { host, reason: said!("the server doesn't offer STARTTLS") });
         }
         let plain = imap.starttls()?;
-        imap = Imap::resume(transport::upgrade(plain, &host)?);
+        imap = Imap::resume(transport::upgrade(plain, &host, server.security.insecure())?);
     }
     if imap.is_authenticated() {
         return Ok(imap);
