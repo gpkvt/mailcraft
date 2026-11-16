@@ -95,13 +95,13 @@ pub(crate) fn open_smtp_with<'a>(
     stream.watch(cancel);
     let mut smtp = Smtp::connect(stream)?;
     let mut offered = smtp.hello(CLIENT_NAME)?;
-    if server.security == Security::StartTls {
+    if server.security.is_starttls() {
         // Never carry on in the clear when encryption was asked for.
         if !offered.starttls {
             return Err(NetError::Tls { host, reason: said!("the server doesn't offer STARTTLS") });
         }
         let plain = smtp.starttls()?;
-        smtp = Smtp::resume(transport::upgrade(plain, &host)?);
+        smtp = Smtp::resume(transport::upgrade(plain, &host, server.security.insecure())?);
         offered = smtp.hello(CLIENT_NAME)?;
     }
     if account.oauth.is_some() {

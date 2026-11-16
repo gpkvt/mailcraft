@@ -213,13 +213,13 @@ impl Write for Stream<'_> {
 
 /// The port to connect to: the server's own, or the usual one for its security when it names none.
 pub(crate) fn port(server: &Server, service: Service) -> u16 {
-    match (server.port, service, server.security) {
-        (0, Service::Imap, Security::Tls) => 993,
-        (0, Service::Imap, _) => 143,
-        (0, Service::Smtp, Security::Tls) => 465,
-        (0, Service::Smtp, _) => 587,
-        (0, Service::Http, Security::Tls) => 443,
-        (0, Service::Http, _) => 80,
+    match (server.port, service, server.security.is_tls()) {
+        (0, Service::Imap, true) => 993,
+        (0, Service::Imap, false) => 143,
+        (0, Service::Smtp, true) => 465,
+        (0, Service::Smtp, false) => 587,
+        (0, Service::Http, true) => 443,
+        (0, Service::Http, false) => 80,
         (port, _, _) => port,
     }
 }
@@ -270,7 +270,7 @@ pub(crate) fn open_with<'a>(
     log::debug!("connecting to {host}:{} ({service:?}, {})", port(server, service), server.security.code());
     let (connect, io) = (patience.connect.min(CONNECT_TIMEOUT), patience.io.min(IO_TIMEOUT));
     let tcp = dial(&host, port(server, service), server.security == Security::None, connect, io)?;
-    let mut stream = if server.security == Security::Tls { secure(tcp, &host, tls)? } else { Stream::over(Io::Plain(tcp)) };
+    let mut stream = if server.security.is_tls() { secure(tcp, &host, tls, server.security.insecure())? } else { Stream::over(Io::Plain(tcp)) };
     stream.patience = patience.command.min(COMMAND_TIMEOUT);
     Ok((stream, host))
 }
@@ -282,10 +282,10 @@ pub(crate) fn open_within<'a>(server: &Server, service: Service, connect: Durati
 }
 
 /// Wrap a connection in TLS after the server agreed to STARTTLS. It goes on as it was set up.
-pub(crate) fn upgrade<'a>(stream: Stream<'a>, host: &str) -> Result<Stream<'a>, NetError> {
+pub(crate) fn upgrade<'a>(stream: Stream<'a>, host: &str, insecure: bool) -> Result<Stream<'a>, NetError> {
     let Stream { io, cancel, patience, .. } = stream;
     let mut secured = match io {
-        Io::Plain(tcp) => secure(tcp, host, None)?,
+        Io::Plain(tcp) => secure(tcp, host, None, insecure)?,
         tls @ Io::Tls(_) => Stream::over(tls),
     };
     (secured.cancel, secured.patience) = (cancel, patience);
@@ -366,10 +366,11 @@ fn tls_config() -> Result<Arc<ClientConfig>, String> {
 }
 
 /// Shake hands over `tcp` and check the server's certificate against `host`.
-fn secure<'a>(mut tcp: TcpStream, host: &str, tls: Option<Arc<ClientConfig>>) -> Result<Stream<'a>, NetError> {
+fn secure<'a>(mut tcp: TcpStream, host: &str, tls: Option<Arc<ClientConfig>>, insecure: bool) -> Result<Stream<'a>, NetError> {
     let failed = |reason: Text| NetError::Tls { host: host.to_string(), reason };
     let config = match tls {
         Some(config) => config,
+        None if insecure => crate::tls::insecure_config().map_err(|e| failed(e.into()))?,
         // (The system's own words, as it said them.)
         None => tls_config().map_err(|e| failed(e.into()))?,
     };

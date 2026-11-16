@@ -271,6 +271,10 @@ pub enum Security {
     None,
     /// Upgrade a plain connection with STARTTLS.
     StartTls,
+    /// TLS from the first byte, without checking the certificate (explicit opt-in).
+    TlsInsecure,
+    /// Upgrade with STARTTLS, without checking the certificate (explicit opt-in).
+    StartTlsInsecure,
     /// TLS from the first byte.
     #[default]
     Tls,
@@ -281,6 +285,8 @@ impl Security {
         match s.trim().to_ascii_lowercase().replace(['/', ' ', '-'], "").as_str() {
             "none" | "plain" => Some(Security::None),
             "starttls" => Some(Security::StartTls),
+            "starttlsinsecure" | "insecurestarttls" => Some(Security::StartTlsInsecure),
+            "tlsinsecure" | "insecuretls" => Some(Security::TlsInsecure),
             "tls" | "ssl" | "ssltls" => Some(Security::Tls),
             _ => None,
         }
@@ -290,8 +296,41 @@ impl Security {
         match self {
             Security::None => "none",
             Security::StartTls => "starttls",
+            Security::TlsInsecure => "tlsInsecure",
+            Security::StartTlsInsecure => "starttlsInsecure",
             Security::Tls => "tls",
         }
+    }
+
+    /// Whether TLS starts immediately, rather than after STARTTLS.
+    pub fn is_tls(self) -> bool {
+        matches!(self, Security::Tls | Security::TlsInsecure)
+    }
+
+    /// Whether the connection must be upgraded with STARTTLS.
+    pub fn is_starttls(self) -> bool {
+        matches!(self, Security::StartTls | Security::StartTlsInsecure)
+    }
+
+    /// Whether certificate validation was explicitly disabled.
+    pub fn insecure(self) -> bool {
+        matches!(self, Security::TlsInsecure | Security::StartTlsInsecure)
+    }
+
+    /// Keep the transport mode while changing certificate validation.
+    pub fn with_insecure(self, insecure: bool) -> Security {
+        match (self, insecure) {
+            (Security::None, _) => Security::None,
+            (Security::Tls | Security::TlsInsecure, false) => Security::Tls,
+            (Security::Tls | Security::TlsInsecure, true) => Security::TlsInsecure,
+            (Security::StartTls | Security::StartTlsInsecure, false) => Security::StartTls,
+            (Security::StartTls | Security::StartTlsInsecure, true) => Security::StartTlsInsecure,
+        }
+    }
+
+    /// The transport mode without its certificate-validation choice.
+    pub fn transport(self) -> Security {
+        self.with_insecure(false)
     }
 }
 

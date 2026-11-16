@@ -2662,7 +2662,7 @@ fn server_row(ui: &mut Ui, pass: &mut Pass, label: &str, key: &'static str, serv
             .hint_text(host_hint.to_owned());
         let resp = crate::text_menu::field(ui.add(host)).on_hover_text(tl!("The server's name"));
         pass.field(&resp);
-        let usual = if server.security == Security::Tls { ports.0 } else { ports.1 };
+        let usual = if server.security.is_tls() { ports.0 } else { ports.1 };
         // (What is pasted into it is its digits, or nothing: `text_menu::digits_only`.)
         crate::text_menu::digits_only(ui.ctx(), field_id(("account", key, "port")));
         let port = TextEdit::singleline(&mut server.port)
@@ -2679,6 +2679,18 @@ fn server_row(ui: &mut Ui, pass: &mut Pass, label: &str, key: &'static str, serv
         }
         encryption(ui, key, &mut server.security, &choices, resp.rect.height(), &pass.t);
     });
+    if server.security != Security::None {
+        let mut insecure = server.security.insecure();
+        let response = ui.checkbox(&mut insecure, tl!("Allow insecure TLS certificates"));
+        let changed = response.changed();
+        response.on_hover_text(tl!("Disables certificate validation for this server. Traffic remains encrypted, but the server's identity is not verified."));
+        if changed {
+            server.security = server.security.with_insecure(insecure);
+        }
+        if insecure {
+            ui.colored_label(pass.t.text_dim, tl!("Warning: any certificate will be accepted for this server."));
+        }
+    }
 }
 
 /// How the connection to a server is encrypted: a choice as buttons joined in a row, as tall as
@@ -2688,7 +2700,7 @@ fn encryption(ui: &mut Ui, key: &'static str, value: &mut Security, choices: &[(
     for (i, (choice, label)) in choices.iter().enumerate() {
         let (_, r) = ui.allocate_space(vec2(78.0, height));
         let resp = ui.interact(r, ui.scope_id().with((key, choice.code())), Sense::click());
-        let on = *value == *choice;
+        let on = value.transport() == *choice;
         resp.widget_info(|| WidgetInfo::selected(Role::RadioButton, true, on, *label));
         let (left, right) = (if i == 0 { 4 } else { 0 }, if i + 1 == choices.len() { 4 } else { 0 });
         let corners = egui::CornerRadius { nw: left, sw: left, ne: right, se: right };
@@ -2702,7 +2714,7 @@ fn encryption(ui: &mut Ui, key: &'static str, value: &mut Security, choices: &[(
         ui.painter().rect(r, corners, fill, Stroke::new(1.0, if on || resp.has_focus() { t.accent } else { t.input_border }), StrokeKind::Inside);
         ui.painter().text(r.center(), Align2::CENTER_CENTER, *label, regular(12.0), if on { t.text } else { t.text_dim });
         if resp.clicked() {
-            *value = *choice;
+            *value = choice.with_insecure(value.insecure());
         }
     }
     ui.spacing_mut().item_spacing.x = gap;
