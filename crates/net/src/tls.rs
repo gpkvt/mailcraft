@@ -83,8 +83,13 @@ pub(crate) fn pinned_config(pin: Option<[u8; 32]>) -> Result<(Arc<ClientConfig>,
 /// A verifier used only when an account owner explicitly opts out of certificate checks.
 /// TLS encryption and handshake signature verification remain enabled; only certificate identity,
 /// trust-chain and validity checks are skipped.
-#[derive(Debug)]
 struct InsecureVerifier(Arc<CryptoProvider>);
+
+impl std::fmt::Debug for InsecureVerifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InsecureVerifier").finish_non_exhaustive()
+    }
+}
 
 impl ServerCertVerifier for InsecureVerifier {
     fn verify_server_cert(
